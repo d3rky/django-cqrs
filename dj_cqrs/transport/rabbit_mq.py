@@ -28,8 +28,12 @@ class RabbitMQTransport(LoggingMixin, BaseTransport):
 
     @classmethod
     def clean_connection(cls):
-        if cls._producer_connection and not cls._producer_connection.is_closed:
-            cls._producer_connection.close()
+        connection = cls._producer_connection
+        if connection and not (connection.is_closed or connection.is_closing):
+            try:
+                connection.close()
+            except (exceptions.StreamLostError, exceptions.ConnectionClosed, ConnectionError):
+                logger.warning("Connection was closed or is closing. Skip it...")
 
         cls._producer_connection = None
         cls._producer_channel = None
@@ -53,7 +57,7 @@ class RabbitMQTransport(LoggingMixin, BaseTransport):
                 logger.error('AMQP connection error. Reconnecting...')
                 time.sleep(cls.CONSUMER_RETRY_TIMEOUT)
             finally:
-                if connection and not connection.is_closed:
+                if connection and not (connection.is_closed or connection.is_closing):
                     connection.close()
 
     @classmethod
